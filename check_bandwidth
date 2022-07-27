@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# ============================== SUMMARY =====================================
+#Author : Ken Roulamellah
+#Date : 19/07/2018
+#Version : 1.0
+# Licence : GPL
+# ===================== INFORMATION ABOUT THIS PLUGIN ========================
+#
+# This plugin checks the average RX and TX bandwidth utilisation. It use
+# kbytes as measure unite.
+#
+# ========================== START OF PROGRAM CODE ===========================
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+function print_usage()
+{
+  echo "Usage :"
+  echo "$0 [ -i=INTERFACE]  [ -ct=COUNT ] -w WARNING -c CRITICAL"
+  echo "This script calculate the average bandwith usage."
+  echo "Default values | interface: eth0, counter: 10"
+}
+
+interface="eth0"
+counter=10
+warning=-1
+critical=-1
+
+sum_rx=0
+sum_tx=0
+avg_rx=
+avg_tx=
+i=
+
+
+if [[ $# -lt 4 ]];
+then
+	echo "Error: Arguments are missing"
+	print_usage
+	exit $STATE_UNKNOWN
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -i=*)
+            interface="$(cut -d'=' -f2 <<<"$1")"
+            shift
+        ;;
+        -ct=*)
+            counter="$(cut -d'=' -f2 <<<"$1")"
+            shift
+        ;;
+        -w)
+            warning=$2
+            shift 2
+        ;;
+        -c)
+            critical=$2
+            shift 2
+        ;;
+        *)
+            printf "\nError: Invalid option '$1'"
+            print_usage
+            exit $STATE_UNKNOWN
+        ;;
+    esac
+done
+
+if [ $warning -lt 0 ] || [ $critical -lt 0 ];
+then
+	echo "Error: You need to specify a warning and critical treshold"
+	print_usage
+    exit $STATE_UNKNOWN
+fi
+
+grep -q "up" /sys/class/net/$interface/operstate || exec echo "$interface: no such device or down"
+
+read rx <"/sys/class/net/$interface/statistics/rx_bytes"
+read tx <"/sys/class/net/$interface/statistics/tx_bytes"
+
+i=$counter
+while [ $i -gt 0 ]; do
+    sleep 1
+    read newrx <"/sys/class/net/$interface/statistics/rx_bytes"
+    read newtx <"/sys/class/net/$interface/statistics/tx_bytes"
+
+    #echo "old rx :$rx"
+    #echo "new rx :$newrx"
+    rx_cal=$(bc <<< "scale=2; ($newrx-$rx) / 1000")
+    tx_cal=$(bc <<< "scale=2; ($newtx-$tx) / 1000")
+
+    sum_rx=$(bc <<< "scale=2;$sum_rx+$rx_cal")
+    sum_tx=$(bc <<< "scale=2;$sum_tx+$tx_cal")
+
+    #echo  "$interface {rx: $rx_cal ko/s, tx: $tx_cal ko/s}"
+    rx=$newrx
+    tx=$newtx
+    ((i --))
+done
+
+avg_rx=$(bc <<< "scale=2;$sum_rx/$counter")
+avg_tx=$(bc <<< "scale=2;$sum_tx/$counter")
+
+#echo "$avg_rx"
+#echo "$avg_tx"
+
+
+if [ $(bc <<< "$avg_rx > $critical || $avg_tx > $critical") -eq 1 ]; then
+	echo "$interface CRITICAL - AVG_RX: $avg_rx kb/s,  AVG_TX: $avg_tx kb/s | 'Average Bandwidth RX'="$avg_rx";0;0;0;10000 'Average Bandwidth TX'="$avg_tx";0;0;0;10000"
+	exit $STATE_CRITICAL
+elif [ $(bc <<< "$avg_rx > $warning || $avg_tx > $warning") -eq 1 ]; then
+	echo "$interface WARNING - AVG_RX: $avg_rx kb/s,  AVG_TX: $avg_tx kb/s | 'Average Bandwidth RX'="$avg_rx";0;0;0;10000 'Average Bandwidth TX'="$avg_tx";0;0;0;10000"
+	exit $STATE_WARNING
+else
+	echo "$interface - OK AVG_RX: $avg_rx kb/s,  AVG_TX: $avg_tx kb/s | 'Average Bandwidth RX'="$avg_rx";0;0;0;10000 'Average Bandwidth TX'="$avg_tx";0;0;0;10000"
+	exit $STATE_OK
+fi
+exit 3
