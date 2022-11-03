@@ -1,0 +1,3154 @@
+# ================================ SUMMARY ====================================
+#
+# File    : check_mysqld.ncfg
+# Version : 0.22
+# Date    : Dec 18, 2011
+# Author  : William Leibzon - william@leibzon.org
+# Summary : Nagiosgrapher template for mysql database check done with check_mysqld.pl
+# Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
+#
+# This is considered a supplemental file to check_mysqld.pl plugin and though
+# not distributed in unified package it is distributed under same licencing
+# terms (GNU 2.0 license). Any redisribution of this file in modified form must
+# reproduce this summary (modified if appropriate) and must either include
+# entire GNU license in a package or list URL where it can be found if
+# distributed as single file.
+#
+# ===================== INFORMATION ABOUT THIS TEMPLATE =======================
+#
+# This is a nagiosgrapher template for mysql database check done with check_mysqld.pl
+#
+# The template tries to graph number of MYSQL variables returned with "SHOW STATUS"
+# (for mysql 5.x - "SHOW GLOBAL STATUS") which are described at:
+# http://dev.mysql.com/doc/refman/4.1/en/server-status-variables.html
+#
+# Data graphs are separated into the following pages (for those using ngraphs.cgi these
+# are called "Metric Groups):
+#
+# 1. Queries (rate of queries being processed)
+#  This is default screen when you first enter graph and it shows how many DELETE, INSERT,
+#  UPDATE and SELECT queries are processed. For select it also tries to show how many
+#  queries are being answered with data from cache and for those that are causing db read
+#  it shows if query causes cache to be updated or not. This mysql documentation page
+#  explains a little about qcache variables and totals for SELECT queries:
+#    http://dev.mysql.com/doc/refman/4.1/en/query-cache-status-and-maintenance.html
+# 2. Data Traffic (in MB/sec)
+#  No explantion needed - just your typical network traffic graph.
+# 3. Connections and Threads
+#  Current number of connections to the server, maximum number of connections
+#  and number threads in use.
+# 4. Tables and Files
+#  Number of open files, open tables. Number of temp files & tables created.
+#  Also Number of table locks per second.
+# 5. Errors and Issues
+#  Various parameters (far from all possible to be retrieved) that indicate a problem -
+#  all should be 0 or close to it. Rate of slow queries are one of the probably most
+#  well known and tracked of the variables graphed.
+# 6. Key Cache Efficiency
+#  This is based on key_ variables and supposed to indicate percent of key requests
+#  queries that are answered from memory. For more info see comment under 'key_reads'
+#  variable from mysql documentation page on how to calculate "cache miss rate".
+#  Efficiency percent I show is just 100%-cache_miss%.
+# 7. Key Cache Data
+#  Raw data used in calculating efficiency. This is graphed separately to track total
+#  number of requests.
+# 8. Handler Row Requests
+#  This tracks requests for next row, previous row and associated update/delete/insert
+#  row requests that you do when keeping open handle. This is probably very interesting data,
+#  but I do not entirely understand it and I also have a feeling numbers shown are too high
+# 9. Query Cache Memory
+#  This will show used and free blocks and total number of queries in cache.
+# 10. Query Cache Hits
+#  Number of hits and update of query cache. Most of these numbers are already shown as part
+#  of first "Queries" screen
+# 11. Binlog Cache Transactions
+#  Graphed are binlog_cache_use and binlog_cache_disk_use variables. 
+#
+# ============================= SETUP NOTES ====================================
+# 
+# 1. Copy this template into your ngraph.d directory
+# 2. Make sure all nagios service you want to graph have names
+#    that start with 'MYSQL' (case should not matter)
+# 3. Make sure you specify all attributes as below listed under
+#    '$USER21$' as a '-A' parameter to check_mysqld.pl plugin
+# 4. Make sure you have copy of nagios that accepts without being
+#    cut performance data of up to 1500 bytes (best 2k) in size
+#    ('threads_running=??' should be the last performance variable seen
+#    under 'Performance Data:" in nagios 'Service State Information')
+#
+# For reference the following is how I defined mysql check in nagios commands config:
+#   define command{
+#        command_name    check_mysql
+#        command_line    $USER1$/check_mysqld.pl -H $HOSTADDRESS$ -u nagios -p $USER7$ -a uptime,threads_connected,questions,slow_queries,
+open_tables -w ',,,,' -c ',,,,' -A $USER21$
+#        }
+# This service definition is just:
+#   define  service{
+#        use                             db-service
+#        servicegroups                   dbservices
+#        hostgroup_name                  mysql
+#        service_description             MySQL
+#        check_command                   check_mysql
+#        }
+# And most important (for the graphing) my resource.cfg has the following:
+#   # Mysql 'nagios' user password
+#   $USER7$=public_example
+#
+#   # List of variables to be retrieved for mysqld (here mostly for convinience so as not to put in commmands.cfg)
+#   $USER21$='com_select,com_update,com_insert,com_insert_select,com_commit,com_delete,com_rollback,aborted_clients,aborted_connects,binlog_cache_disk_use,binlog_cache_use,bytes_received,bytes_sent,connections,created_tmp_disk_tables,created_tmp_files,created_tmp_tables,delayed_errors,delayed_insert_threads,delayed_writes,handler_update,handler_write,handler_delete,handler_read_first,handler_read_key,handler_read_next,handler_read_prev,handler_read_rnd,handler_read_rnd_next,key_blocks_not_flushed,key_blocks_unused,key_blocks_used,key_read_requests,key_reads,key_write_requests,key_writes,max_used_connections,not_flushed_delayed_rows,open_files,open_streams,open_tables,opened_tables,prepared_stmt_count,qcache_free_blocks,qcache_free_memory,qcache_hits,qcache_inserts,qcache_lowmem_prunes,qcache_not_cached,qcache_queries_in_cache,qcache_total_blocks,questions,select_full_join,select_rangle_check,slow_launch_threads,slow_queries,table_locks_immediate,table_locks_waited,threads_cached,threads_connected,threads_created,threads_running'
+#
+# -----------------------------------------------------------------------------
+# 
+# You will need nagios with larger buffers (as compared to usual 2.x distrubutions)
+# for storing performance variables in order to fully utilize this template. 
+# Doing so requires recompile after modifying MAX_INPUT_BUFFER, MAX_COMMAND_BUFFER,
+# MAX_PLUGINOUTPUT_LENGTH which are defined in objects.h and common.h.
+# Patches for some versions of nagios is available at
+#   http://william.leibzon.org/nagios/
+# 
+# Additionally this template relies on features that may not be part of standard
+# nagiosgrapher, in particular it requires treating definition with no or empty page
+# as being shared among configs for all pages (this is used for defining variable
+# from performance data and thereafter more then one pages graphs it or uses it
+# in calculating local CDEF that is graphed). I have not checked on latest
+# versions of nagiosgrapher and do not know for certain if that would or would
+# not work properly. If not either try to use simpler version of this template
+# (only first couple pages defined) or see my site (URL in last paragraph) for
+# modified nagiosgrapher code that I use.
+#
+# ========================= VERSION HISTORY and TODO ==========================
+#
+# v0.2 - 01/02/2008  : This is initial public release
+#                      (I'll not go into details about my local work on it prior)
+# v0.21 - 01/03/2008 : Fixed bug in calculation of total number of queries
+		       without counting cache hits 
+# v0.22 - 12/19/2011 : Changed so that first STACK is now AREA,
+#                      otherwise newer rrd gives error
+# 
+# TODO: a. Testing under newest 5.x and 6.0 alpha versions of mysql
+#       b. Better documentation of what graphed data means.
+#       c. Information from mysql developers about 'handler' data 
+#          and confirmation that it is being displayed properly
+#
+# =============================== END OF HEADER ===============================
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        com_commit=(\d+)
+        graph_value             com_commit
+        graph_units             commands/sec 
+        graph_legend            Commit Commands          : 
+	rrd_type		COUNTER
+        rrd_plottype            STACK
+        rrd_color               DDA0DD
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_commit
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_commit
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_commit
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        com_rollback=(\d+)
+        graph_value             com_rollback
+        graph_units             commands/sec 
+        graph_legend            Rollback Commands        : 
+	rrd_type		COUNTER
+        rrd_plottype            STACK
+        rrd_color               FF8C00
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_rollback
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_rollback
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_rollback
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        com_delete=(\d+)
+        graph_value             com_delete
+        graph_units             commands/sec 
+        graph_legend            Delete Commands          : 
+	rrd_type		COUNTER
+        rrd_plottype            STACK
+        rrd_color               8B4513
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_delete
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_delete
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_delete
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        com_update=(\d+)
+        graph_value             com_update
+        graph_units             commands/sec 
+        graph_legend            Update Commands          : 
+	rrd_type		COUNTER
+        rrd_plottype            STACK
+        rrd_color               FF1493
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_update
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_update
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_update
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        com_insert=(\d+)
+        graph_value             com_insert
+        graph_units             commands/sec 
+        graph_legend            Insert Commands          : 
+	rrd_type		COUNTER
+        rrd_plottype            STACK
+        rrd_color               1E90FF
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_insert
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_insert
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_insert
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        com_insert_select=(\d+)
+        graph_value             com_inselect
+        graph_units             commands/sec 
+        graph_legend            Insert_Select Commands   : 
+	rrd_type		COUNTER
+        rrd_plottype            STACK
+        rrd_color               00FFFF
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_inselect
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_inselect
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_inselect
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description
+        print_repeat            0
+        page                    SQL Queries
+        print_eol               left
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	com_select=(\d+)
+        graph_value		com_select
+	rrd_type		COUNTER
+	page			SQL Queries
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	qcache_hits=(\d+)
+        graph_value		qc_hits
+	rrd_type		COUNTER
+	page			
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	qcache_inserts=(\d+)
+        graph_value		qc_inserts
+	rrd_type		COUNTER
+	page			
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	qcache_not_cached=(\d+)
+        graph_value		qc_not_cached
+	rrd_type		COUNTER
+	page			
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             select_graph
+        graph_units             commands/sec 
+        graph_legend            Select - from DB         : 
+	graph_calc		com_select,qc_inserts,-,qc_not_cached,-
+        rrd_plottype            STACK
+        rrd_color               7FFF00
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_select
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_select
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_select
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             com_qc_notcached
+        graph_units             commands/sec 
+        graph_legend            - of that not cached     : 
+	graph_calc		qc_not_cached
+        rrd_plottype            STACK
+        rrd_color               32CD32
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_qc_notcached
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_qc_notcached
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_qc_notcached
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             com_qc_inserts
+        graph_units             commands/sec 
+        graph_legend            - of that added to cache : 
+	graph_calc		qc_inserts
+        rrd_plottype            STACK
+        rrd_color               98FB98
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_qc_inserts
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_qc_inserts
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_qc_inserts
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             com_qc_select
+        graph_units             commands/sec 
+        graph_legend            Select - from Cache      : 
+	graph_calc		qc_hits
+        rrd_plottype            STACK
+        rrd_color               F0E68C
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_qc_select
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_qc_select
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_qc_select
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             com_select_total
+	graph_calc		qc_hits,com_select,+
+	page			SQL Queries
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description       = Total Select Queries     : 
+        print_repeat            0
+        page                    SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	com_select_total
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_select_total
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		com_select_total
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description        
+        print_repeat            0
+        page			SQL Queries
+	print_eol		left
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	questions=(\d+)
+        graph_value		questions
+	rrd_type		COUNTER
+	page			SQL Queries
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             queries_nocache
+        graph_units             commands/sec 
+        graph_legend            All DB Queries (except cache hits)  : 
+	graph_calc		questions,qc_hits,-
+        rrd_plottype            LINE1
+        rrd_color               696969
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	queries_nocache
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		queries_nocache
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		queries_nocache
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             queries_all
+        graph_units             commands/sec 
+        graph_legend            All Questions (counting cache hits) : 
+	graph_calc		questions
+        rrd_plottype            LINE2
+        rrd_color               000000
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	queries_all
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		queries_all
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		queries_all
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			SQL Queries
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        bytes_sent=(\d+)
+        graph_value             bytes_sent
+        graph_units             bytes/sec 
+        graph_legend            Traffic Out : 
+	rrd_type		COUNTER
+        rrd_plottype            AREA
+        rrd_color               00FF00
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	bytes_sent
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bytes_sent
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bytes_sent
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        bytes_received=(\d+)
+        graph_value             bytes_received
+        graph_units             bytes/sec 
+        graph_legend            Traffic In  : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	bytes_received
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bytes_received
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bytes_received
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Data Traffic
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        max_used_connections=(\d+)
+        graph_value             max_used_con
+        graph_units             conn 
+        graph_legend            Max Used Connections   : 
+	rrd_type		GAUGE
+        rrd_plottype            AREA
+        rrd_color               90EE90
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	max_used_con
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		max_used_con
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		max_used_con
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        threads_connected=(\d+)
+        graph_value             threads_connected
+        graph_units             threads 
+        graph_legend            Threads Connected      : 
+	rrd_type		GAUGE
+        rrd_plottype            AREA
+        rrd_color               00FFFF
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	threads_connected
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		threads_connected
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		threads_connected
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        threads_running=(\d+)
+        graph_value             threads_running
+        graph_units             threads 
+        graph_legend            Threads Running        : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	threads_running
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		threads_running
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		threads_running
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        threads_cached=(\d+)
+        graph_value             threads_cached
+        graph_units             threads 
+        graph_legend            Threads Cached         : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE2
+        rrd_color               FF00FF
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	threads_cached
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		threads_cached
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		threads_cached
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        connections=(\d+)
+        graph_value             connections
+        graph_units             conn/sec 
+        graph_legend            Connections per second : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	connections
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		connections
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		connections
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Connections and Threads
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	threads_created=(\d+)
+        graph_value		threads_created
+	rrd_type		COUNTER
+	page			Connections and Threads
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        open_files=(\d+)
+        graph_value             open_files
+        graph_units             # 
+        graph_legend            Open Files   : 
+	rrd_type		GAUGE
+        rrd_plottype            AREA
+        rrd_color               7FFF00
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	open_files
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		open_files
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		open_files
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        open_tables=(\d+)
+        graph_value             open_tables
+        graph_units             # 
+        graph_legend            Open Tables  : 
+	rrd_type		GAUGE
+        rrd_plottype            AREA
+        rrd_color               00FFFF
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	open_tables
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		open_tables
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		open_tables
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        open_streams=(\d+)
+        graph_value             open_streams
+        graph_units             # 
+        graph_legend            Open Streams : 
+	rrd_type		GAUGE
+        rrd_plottype            AREA
+        rrd_color               808080
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	open_streams
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		open_streams
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		open_streams
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        created_tmp_files=(\d+)
+        graph_value             cr_tmp_files
+        graph_units             # per sec 
+        graph_legend            Temp Files per sec            : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               006400
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	cr_tmp_files
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		cr_tmp_files
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		cr_tmp_files
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        created_tmp_tables=(\d+)
+        graph_value             cr_tmp_tables
+        graph_units             # per sec 
+        graph_legend            Temp Tables per sec           : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	cr_tmp_tables
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		cr_tmp_tables
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		cr_tmp_tables
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        created_tmp_disk_tables=(\d+)
+        graph_value             cr_tmp_disk_tbls
+        graph_units             #  per sec 
+        graph_legend            Temp Disk Tables per sec      : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               FFD700
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	cr_tmp_disk_tbls
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		cr_tmp_disk_tbls
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		cr_tmp_disk_tbls
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        table_locks_immediate=(\d+)
+        graph_value             tbl_lck_immediate
+        graph_units             # per sec 
+        graph_legend            Table Locks Immediate per sec : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	tbl_lck_immediate
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		tbl_lck_immediate
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		tbl_lck_immediate
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        table_locks_waited=(\d+)
+        graph_value             tbl_lck_waited
+        graph_units             # per sec 
+        graph_legend            Table Locks Waited per sec    : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               FF00FF
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	tbl_lck_waited
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		tbl_lck_waited
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		tbl_lck_waited
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Tables and Files
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	opened_tables=(\d+)
+        graph_value		opened_tables
+	rrd_type		COUNTER
+	page			Tables and Files
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        slow_queries=(\d+)
+        graph_value             slow_queries
+        graph_units             #/sec 
+        graph_legend            Slow Queries per sec     : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               7FFF00
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	slow_queries
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		slow_queries
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		slow_queries
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        slow_launch_threads=(\d+)
+        graph_value             slow_launch_thr
+        graph_units             # 
+        graph_legend            Slow Launch Threads      : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE1
+        rrd_color               006400
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	slow_launch_thr
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		slow_launch_thr
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		slow_launch_thr
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        aborted_clients=(\d+)
+        graph_value             aborted_clients
+        graph_units             #/sec 
+        graph_legend            Aborted Clients per sec  : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE1
+        rrd_color               0000FF
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	aborted_clients
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		aborted_clients
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		aborted_clients
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        aborted_connects=(\d+)
+        graph_value             aborted_connects
+        graph_units             #/sec 
+        graph_legend            Aborted Connects per sec : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE1
+        rrd_color               A52A2A
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	aborted_connects
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		aborted_connects
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		aborted_connects
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        delayed_errors=(\d+)
+        graph_value             delayed_errors
+        graph_units             # 
+        graph_legend            Delayed Errors           : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE1
+        rrd_color               FF0000
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	delayed_errors
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		delayed_errors
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		delayed_errors
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        delayed_writes=(\d+)
+        graph_value             delayed_writes
+        graph_units             # 
+        graph_legend            Delayed Writes           : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE1
+        rrd_color               FF00FF
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	delayed_writes
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		delayed_writes
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		delayed_writes
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        delayed_insert_threads=(\d+)
+        graph_value             delayed_ins_thr
+        graph_units             # 
+        graph_legend            Delayed Inserts Threads  : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE1
+        rrd_color               A0522D
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	delayed_ins_thr
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		delayed_ins_thr
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		delayed_ins_thr
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        not_flushed_delayed_rows=(\d+)
+        graph_value             nfl_delayed_rows
+        graph_units             # 
+        graph_legend            Not Flushed Delayed Rows : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE1
+        rrd_color               FFD700
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	nfl_delayed_rows
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		nfl_delayed_rows
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		nfl_delayed_rows
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        key_blocks_not_flushed=(\d+)
+        graph_value             key_blocks_nfl
+        graph_units             # 
+        graph_legend            Key Blocks Not Flushed   : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE1
+        rrd_color               696969
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_blocks_nfl
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_blocks_nfl
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_blocks_nfl
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Errors and Issues
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	key_reads=(\d+)
+        graph_value		key_reads
+	rrd_type		COUNTER
+	page			Key Cache Efficiency
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	key_read_requests=(\d+)
+        graph_value		key_read_rq
+	rrd_type		COUNTER
+	page			Key Cache Efficiency
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	key_writes=(\d+)
+        graph_value		key_writes
+	rrd_type		COUNTER
+	page			Key Cache Efficiency
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	key_write_requests=(\d+)
+        graph_value		key_write_rq
+	rrd_type		COUNTER
+	page			Key Cache Efficiency
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	key_blocks_used=(\d+)
+        graph_value		key_blocks_used
+	rrd_type		GAUGE
+	page			Key Cache Efficiency
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	key_blocks_unused=(\d+)
+        graph_value		key_blocks_unused
+	rrd_type		GAUGE
+	page			Key Cache Efficiency
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             key_used_percent
+        graph_units             % 
+        graph_legend            Used Key Cache Percent    
+	graph_calc		key_blocks_used,key_blocks_unused,-,key_blocks_used,/,100,*
+        rrd_plottype            AREA
+        rrd_color               00FFFF
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_used_percent
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf%%\t
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_used_percent
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf%%\t
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_used_percent
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf%%\t
+	print_eol		left
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             key_read_efficiency
+        graph_units             % 
+        graph_legend            Key Cache Read Efficiency 
+	graph_calc		100,key_reads,key_read_rq,/,100,*,-
+        rrd_plottype            LINE2
+        rrd_color               00FF00
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_read_efficiency
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf%%\t
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_read_efficiency
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf%%\t
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_read_efficiency
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf%%\t
+	print_eol		left
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             key_write_efficiency
+        graph_units             % 
+        graph_legend            Key Cache Write Efficiency
+	graph_calc		100,key_writes,key_write_rq,/,100,*,-
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_write_efficiency
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf%%\t
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_write_efficiency
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf%%\t
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_write_efficiency
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf%%\t
+	print_eol		left
+	page			Key Cache Efficiency
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        key_reads=(\d+)
+        graph_value             key_reads2
+        graph_units             #/sec 
+        graph_legend            Key Reads per sec          : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_reads2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_reads2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_reads2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        key_read_requests=(\d+)
+        graph_value             key_read_req2
+        graph_units             #/sec 
+        graph_legend            Key Reads Requests per sec : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               00FFFF
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_read_req2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_read_req2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_read_req2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        key_writes=(\d+)
+        graph_value             key_writes2
+        graph_units             #/sec 
+        graph_legend            Key Writes per sec         : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               006400
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_writes2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_writes2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_writes2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        key_write_requests=(\d+)
+        graph_value             key_write_req2
+        graph_units             #/sec 
+        graph_legend            Key Write Requests per sec : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               00FF00
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_write_req2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_write_req2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_write_req2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        key_blocks_not_flushed=(\d+)
+        graph_value             key_blk_nfl2
+        graph_units             # 
+        graph_legend            Key Blocks Not Flushed     : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	key_blk_nfl2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_blk_nfl2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		key_blk_nfl2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Key Cache Data
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_update=(\d+)
+        graph_value             handler_update
+        graph_units             requests/sec 
+        graph_legend            Update Row : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               00FFFF
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_update
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_update
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_update
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_write=(\d+)
+        graph_value             handler_write
+        graph_units             requests/sec 
+        graph_legend            Insert Row : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_write
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_write
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_write
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_delete=(\d+)
+        graph_value             handler_delete
+        graph_units             requests/sec 
+        graph_legend            Delete Row : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               696969
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_delete
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_delete
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_delete
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_read_first=(\d+)
+        graph_value             handler_read_first
+        graph_units             requests/sec 
+        graph_legend            First Entry Read from Index : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               FFA500
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_read_first
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_first
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_first
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_read_key=(\d+)
+        graph_value             handler_read_key
+        graph_units             requests/sec 
+        graph_legend            Row Read based on Key       : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               808000
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_read_key
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_key
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_key
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_read_next=(\d+)
+        graph_value             handler_read_next
+        graph_units             requests/sec 
+        graph_legend            Next Row in Key Order       : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               00FF00
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_read_next
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_next
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_next
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_read_prev=(\d+)
+        graph_value             handler_read_prev
+        graph_units             requests/sec 
+        graph_legend            Previous Row in Key Order   : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               008000
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_read_prev
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_prev
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_prev
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_read_rnd=(\d+)
+        graph_value             handler_read_rnd
+        graph_units             requests/sec 
+        graph_legend            Read Row Fixed Position     : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               EE82EE
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_read_rnd
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_rnd
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_rnd
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        handler_read_rnd_next=(\d+)
+        graph_value             handler_read_rnxt
+        graph_units             requests/sec 
+        graph_legend            Next Row in Data File       : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	handler_read_rnxt
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_rnxt
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		handler_read_rnxt
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Handler Row Requests
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	qcache_total_blocks=(\d+)
+        graph_value		qc_total_blocks
+        graph_units		# blocks 
+        graph_legend		Free Blocks      : 
+	rrd_type		GAUGE
+        rrd_plottype		AREA
+        rrd_color		90EE90
+	page			Query Cache Memory
+	rrd_scale_min		
+	rrd_scale_max		
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	qcache_free_blocks=(\d+)
+        graph_value		qc_free_blocks
+	rrd_type		GAUGE
+	page			Query Cache Memory
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_free_blocks
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_free_blocks
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_free_blocks
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             qc_used_blocks
+        graph_units             # blocks 
+        graph_legend            Used Blocks      : 
+	graph_calc		qc_total_blocks,qc_free_blocks,-
+        rrd_plottype            AREA
+        rrd_color               00FFFF
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_used_blocks
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_used_blocks
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_used_blocks
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             qc_percent_used
+	graph_calc		100,qc_free_blocks,qc_total_blocks,/,100,*,-
+	page			Query Cache Memory
+	hide			yes
+}
+
+define ngraph{
+        service_name		MYSQL
+        graph_perf_regex	qcache_free_memory=(\d+)
+        graph_value		qc_free_memory
+	rrd_type		GAUGE
+	page			Query Cache Memory
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             qc_freemem_mb
+	graph_calc		qc_free_memory,1024,/,1024,/
+	page			Query Cache Memory
+	hide			yes
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description       = Total Blocks     : 
+        print_repeat            0
+        page                    Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_total_blocks
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_total_blocks
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_total_blocks
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description       % Percent Used     : 
+        print_repeat            0
+        page                    Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_percent_used
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf%%\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_percent_used
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf%%\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_percent_used
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf%%\t
+	print_eol		left
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        qcache_queries_in_cache=(\d+)
+        graph_value             qc_qr_in_cache
+        graph_units             queries 
+        graph_legend            Queries in Cache : 
+	rrd_type		GAUGE
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_qr_in_cache
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_qr_in_cache
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_qr_in_cache
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description        
+        print_repeat            0
+	print_eol		left
+        page                    Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type                    COMMENT
+        print_description       * Free Memory      : 
+        print_repeat            0
+        page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_freemem_mb
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf MB\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_freemem_mb
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf MB\t
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_freemem_mb
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf MB\t
+	print_eol		left
+	page			Query Cache Memory
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             qc_hits2
+        graph_units             queries/sec 
+        graph_legend            Query Cache Hits per sec   : 
+	graph_calc		qc_hits
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_hits2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_hits2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_hits2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             qc_not_cached2
+        graph_units             queries/sec 
+        graph_legend            Non-cached Queries per sec : 
+	graph_calc		qc_not_cached
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_not_cached2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_not_cached2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_not_cached2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name            MYSQL
+	type			CDEF
+        graph_value             qc_inserts2
+        graph_units             queries/sec 
+        graph_legend            Queries Added per sec      : 
+	graph_calc		qc_inserts
+        rrd_plottype            LINE2
+        rrd_color               FF00FF
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_inserts2
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_inserts2
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_inserts2
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        qcache_lowmem_prunes=(\d+)
+        graph_value             qc_lowmem_prunes
+        graph_units             queries/sec 
+        graph_legend            Queries Deleted per sec    : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               696969
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	qc_lowmem_prunes
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_lowmem_prunes
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		qc_lowmem_prunes
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Query Cache Hits
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        binlog_cache_use=(\d+)
+        graph_value             bl_cache_use
+        graph_units             transactions/sec 
+        graph_legend            Binlog Cache Transactions per sec    : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               0000FF
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	bl_cache_use
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bl_cache_use
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bl_cache_use
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name            MYSQL
+        graph_perf_regex        binlog_cache_disk_use=(\d+)
+        graph_value             bl_cache_disk_use
+        graph_units             transactions/sec 
+        graph_legend            Binlog Tempfile Transactions per sec : 
+	rrd_type		COUNTER
+        rrd_plottype            LINE2
+        rrd_color               FF0000
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source	 	bl_cache_disk_use
+        print_description	latest = 
+	print_function		LAST
+        print_format		%2.1lf\t
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bl_cache_disk_use
+        print_description	max = 
+        print_function		MAX
+        print_format		%2.1lf\t
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name		MYSQL
+        type			GPRINT
+        print_source		bl_cache_disk_use
+        print_description	average = 
+        print_function		AVERAGE
+        print_format		%2.1lf
+	print_eol		left
+	page			Binlog Cache Transactions
+}
+
+define ngraph{
+        service_name            MYSQL
+        type                    COMMENT
+        print_description
+        print_eol               justify
+        print_repeat            0
+}
