@@ -1,0 +1,193 @@
+#!/bin/sh
+
+# ------------------------------------------------------------------------------
+# box293_check_mysql_table_status - checks the status of MySQL Database Tables
+# Copyright (C) 2015 Troy Lea AKA Box293
+#
+# Will return a critical result if any of theses columns has a NULL value:
+# Engine, Version, Row_format, Rows, Avg_row_length, Data_length,
+# Max_data_length, Index_length, Data_free, Create_time
+# Usage:
+# box293_check_mysql_table_status [database] [username] [password]
+#
+# Created by: Troy Lea <plugins@box293.com> Twitter: @Box293
+# See all my Nagios Projects on the Nagios Exchange: 
+#	http://exchange.nagios.org/directory/Owner/Box293/1
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# ------------------------------------------------------------------------------
+# 				Version Notes
+# ------------------------------------------------------------------------------
+# Version : 2015-08-19
+# Date    : August 19 2015
+# Notes   : This is the first official release of the plugin
+#
+# ------------------------------------------------------------------------------
+
+# Start the mysql command
+mysql_command='echo "show table status in '
+
+# Get the database name
+if [ -z "$1" ] 
+then
+	echo "No database name supplied (this should be the 1st argument)"
+	exit 0
+else
+	# Append the database name to the mysql command
+	mysql_command+="$1"
+fi
+
+# Continue the mysql command
+mysql_command+='\G;" | mysql -B -u"'
+
+# Determine if the username was provided
+if [ -z "$2" ] 
+then
+	echo "No username supplied (this should be the 2nd argument)"
+	exit 0
+else
+	# Append the username to the mysql command
+	mysql_command+="$2"
+fi
+
+# Continue the mysql command
+mysql_command+='" -p"'
+
+# Determine if the password was provided
+if [ -z "$3" ] 
+then
+	echo "No password supplied (this should be the 3rd argument)"
+	exit 0
+else
+	# Append the password to the mysql command
+	mysql_command+="$3"
+fi
+
+# Finish the mysql command
+mysql_command+='" 2>&1'
+
+#echo "$mysql_command"
+
+# Change the Internal Field Separator (IFS) to a newline
+IFS=$'\n';
+
+# Execute the mysql command and store it in an array
+mysql_output=($(eval $mysql_command))
+
+# Change the Internal Field Separator (IFS) back to defaults
+IFS=$' \t\n'
+
+#echo "${mysql_output[@]}"
+#echo ${#mysql_output[@]}
+#echo "${mysql_output[0]}"
+
+# Define some variables
+exit_state=0
+exit_message=''
+table_name=''
+table_comment=''
+
+# Check for any errors otherwise process the results
+case ${mysql_output[0]} in
+ERROR*)
+	# An error was found
+	# Define the exit_state
+	exit_state=2
+	# Define the exit_message
+	exit_message="Database \"$1\" = ${mysql_output[0]}"
+	;;
+*)
+	# Query seems OK, process the query results
+	# Loop through the array
+	column_null_flag=0
+	for r in "${mysql_output[@]}"
+	do
+		#echo "$r"
+		if [[ "$r" == *'row ***************************' ]]
+		then
+			column_null_flag=0
+		else
+			# Define the item and value, removing leading and trailing whitespace
+			item=${r%%:*}
+			item="${item#"${item%%[![:space:]]*}"}"
+			item="${item#"${item%%[![:space:]]*}"}"
+			value=${r#*:}
+			value="${value#"${value%%[![:space:]]*}"}"
+			value="${value#"${value%%[![:space:]]*}"}"
+			
+			#echo item \'"$item"\'
+			#echo value \'"$value"\'
+
+			# Now check the fields we are after
+			case $item in
+			Name)
+				table_name="$value"
+				;;
+			Engine|Version|Row_format|Rows|Avg_row_length|Data_length|Max_data_length|Index_length|Data_free|Create_time)
+				# Does the value for this column have NULL?
+				if [[ "$value" == "NULL" ]]
+				then
+					# Have we already detected a problem?
+					if [[ $column_null_flag -eq 0 ]]
+					then
+						# Define the flag as we don't need to check any more columns
+						column_null_flag=1
+						# Define the exit_state
+						exit_state=2
+						# Add to the exit_message
+						if [[ -z "$exit_message" ]]
+						then
+							exit_message="Database \"$1\" = {Table \"$table_name\" has a problem:"
+						else
+							exit_message+=" {Table \"$table_name\" has a problem:"
+						fi
+					fi
+				fi
+				;;
+			Comment)
+				# Need to record the comment
+				table_comment="$value"
+				;;
+			esac
+
+			# Now determine if the exit message needs the comment added
+			if [[ "$item" == "Comment" ]]
+			then
+				if [[ $column_null_flag -eq 1 ]]
+				then
+					if [[ -z "$exit_message" ]]
+					then
+						exit_message+=" \"NO value found in Comment column ... unsure what the problem is!\"}"
+					else
+						exit_message+=" \"$table_comment\"}"
+					fi
+				fi
+			fi
+		
+		fi
+	done
+	;;
+esac
+
+# Determine if there were no problems
+if [[ $exit_state -eq 0 ]]
+then
+	# Define the exit_message
+	exit_message="Database \"$1\" = All OK"
+fi
+
+echo $exit_message
+exit $exit_state
+
